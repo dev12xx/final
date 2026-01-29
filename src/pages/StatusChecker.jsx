@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Search, Loader2, CheckCircle2, XCircle, Clock, Send, Upload, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
+import { apiFetch } from '../api/client';
 
 const StatusChecker = () => {
     const { t } = useTranslation();
@@ -14,10 +15,11 @@ const StatusChecker = () => {
     const [showAppealForm, setShowAppealForm] = useState(false);
     const [appealReason, setAppealReason] = useState('');
     const [appealEvidence, setAppealEvidence] = useState(null);
+    const [appealEvidenceFile, setAppealEvidenceFile] = useState(null);
     const [isAppealing, setIsAppealing] = useState(false);
     const [appealSuccess, setAppealSuccess] = useState(false);
 
-    const handleSearch = (e) => {
+    const handleSearch = async (e) => {
         e.preventDefault();
         setError('');
         setResult(null);
@@ -27,63 +29,51 @@ const StatusChecker = () => {
         if (!complaintId) return;
 
         setLoading(true);
-        setTimeout(() => {
-            const submissions = JSON.parse(localStorage.getItem('submissions') || '[]');
-            const found = submissions.find(s => s.id.toLowerCase() === complaintId.trim().toLowerCase());
-
-            if (found) {
-                setResult(found);
-            } else {
-                setError(t('statusChecker.notFound'));
-            }
+        try {
+            const ref = complaintId.trim();
+            const found = await apiFetch(`/api/submissions/${encodeURIComponent(ref)}`);
+            setResult(found);
+        } catch (err) {
+            setError(t('statusChecker.notFound'));
+        } finally {
             setLoading(false);
-        }, 1000);
+        }
     };
 
-    const handleAppealSubmit = (e) => {
+    const handleAppealSubmit = async (e) => {
         e.preventDefault();
         setIsAppealing(true);
 
-        setTimeout(() => {
-            const submissions = JSON.parse(localStorage.getItem('submissions') || '[]');
-            const updated = submissions.map(s => {
-                if (s.id === result.id) {
-                    return {
-                        ...s,
-                        status: 'Appeal',
-                        appealData: {
-                            reason: appealReason,
-                            evidence: appealEvidence,
-                            date: new Date().toISOString().split('T')[0]
-                        }
-                    };
-                }
-                return s;
+        try {
+            const fd = new FormData();
+            fd.append('reason', appealReason);
+            if (appealEvidence) fd.append('evidence', appealEvidence);
+            if (appealEvidenceFile) fd.append('evidence_file', appealEvidenceFile);
+
+            const res = await apiFetch(`/api/submissions/${encodeURIComponent(result.id)}/appeal`, {
+                method: 'POST',
+                body: fd,
             });
 
-            localStorage.setItem('submissions', JSON.stringify(updated));
-            window.dispatchEvent(new Event('storage'));
-            setResult({ ...result, status: 'Appeal' });
+            const next = {
+                ...result,
+                status: res?.status || 'Appeal',
+                appealData: res?.appealData || {
+                    reason: appealReason,
+                    evidence: appealEvidence,
+                    date: new Date().toISOString().split('T')[0],
+                },
+            };
+
+            setResult(next);
             setAppealSuccess(true);
-            setIsAppealing(false);
             setShowAppealForm(false);
-        }, 1500);
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setIsAppealing(false);
+        }
     };
-
-    useEffect(() => {
-        const handleStorageChange = () => {
-            if (result) {
-                const submissions = JSON.parse(localStorage.getItem('submissions') || '[]');
-                const updatedResult = submissions.find(s => s.id === result.id);
-                if (updatedResult) {
-                    setResult(updatedResult);
-                }
-            }
-        };
-
-        window.addEventListener('storage', handleStorageChange);
-        return () => window.removeEventListener('storage', handleStorageChange);
-    }, [result]);
 
     const getStatusIcon = (status) => {
         switch (status) {
@@ -232,7 +222,11 @@ const StatusChecker = () => {
                                                         <input
                                                             type="file"
                                                             className="absolute inset-0 opacity-0 cursor-pointer"
-                                                            onChange={(e) => setAppealEvidence(e.target.files[0]?.name)}
+                                                            onChange={(e) => {
+                                                                const file = e.target.files?.[0] || null;
+                                                                setAppealEvidenceFile(file);
+                                                                setAppealEvidence(file?.name || null);
+                                                            }}
                                                         />
                                                     </div>
                                                 </div>

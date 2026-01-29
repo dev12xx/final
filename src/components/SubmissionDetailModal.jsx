@@ -1,7 +1,7 @@
 import { XCircle, AlertCircle, FileText, Printer } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
-const SubmissionDetailModal = ({ isOpen, onClose, submission, onUpdateStatus }) => {
+const SubmissionDetailModal = ({ isOpen, onClose, submission, onUpdateStatus, isUpdating }) => {
     const { t } = useTranslation();
 
     if (!isOpen || !submission) return null;
@@ -59,7 +59,7 @@ const SubmissionDetailModal = ({ isOpen, onClose, submission, onUpdateStatus }) 
                         </div>
                     </div>
 
-                    {submission.status === 'Appeal' && submission.appealData && (
+                    {submission.appealData && (
                         <div className="p-4 sm:p-6 bg-primary-50 rounded-2xl border border-primary-100 border-l-4 border-l-primary-600">
                             <div className="flex items-center gap-2 mb-3">
                                 <AlertCircle className="w-5 h-5 text-primary-600" />
@@ -67,12 +67,49 @@ const SubmissionDetailModal = ({ isOpen, onClose, submission, onUpdateStatus }) 
                             </div>
                             <label className="text-[10px] sm:text-xs font-bold text-primary-400 uppercase tracking-wider mb-2 block">{t('adminDashboard.modal.appealReason')}</label>
                             <p className="text-slate-800 text-sm sm:text-base leading-relaxed mb-4 italic">"{submission.appealData.reason}"</p>
-                            {submission.appealData.evidence && (
+                            {(submission.appealData.evidence || submission.appealData.evidenceAttachment?.url) && (
                                 <div>
                                     <span className="text-[10px] sm:text-xs font-bold text-primary-400 uppercase tracking-wider mb-2 block">{t('adminDashboard.modal.newEvidence')}</span>
-                                    <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-white border border-primary-200 rounded-lg text-xs sm:text-sm text-primary-700">
-                                        <FileText className="w-4 h-4" />
-                                        {submission.appealData.evidence}
+                                    <div className="space-y-3">
+                                        {submission.appealData.evidence && (
+                                            <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-white border border-primary-200 rounded-lg text-xs sm:text-sm text-primary-700">
+                                                <FileText className="w-4 h-4" />
+                                                {submission.appealData.evidence}
+                                            </div>
+                                        )}
+
+                                        {submission.appealData.evidenceAttachment?.url && (
+                                            <div className="space-y-3">
+                                                {String(submission.appealData.evidenceAttachment?.mimeType || '').startsWith('image/') && (
+                                                    <div className="bg-white border border-primary-200 rounded-xl p-3">
+                                                        <img
+                                                            src={submission.appealData.evidenceAttachment.url}
+                                                            alt={submission.appealData.evidenceAttachment.name || submission.appealData.evidence || 'Appeal evidence'}
+                                                            className="w-full max-h-80 object-contain rounded-lg"
+                                                        />
+                                                    </div>
+                                                )}
+
+                                                <div className="flex flex-wrap gap-2">
+                                                    <a
+                                                        href={submission.appealData.evidenceAttachment.url}
+                                                        target="_blank"
+                                                        rel="noopener"
+                                                        className="px-3 py-2 bg-slate-900 text-white rounded-lg text-xs font-bold"
+                                                    >
+                                                        {t('adminDashboard.modal.view', 'View')}
+                                                    </a>
+                                                    <a
+                                                        href={submission.appealData.evidenceAttachment.downloadUrl || submission.appealData.evidenceAttachment.url}
+                                                        target="_blank"
+                                                        rel="noopener"
+                                                        className="px-3 py-2 bg-primary-600 text-white rounded-lg text-xs font-bold"
+                                                    >
+                                                        {t('adminDashboard.modal.download', 'Download')}
+                                                    </a>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             )}
@@ -86,9 +123,44 @@ const SubmissionDetailModal = ({ isOpen, onClose, submission, onUpdateStatus }) 
                         {submission.evidence && (
                             <div className="mt-4 pt-4 border-t border-slate-200">
                                 <span className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">{t('adminDashboard.modal.originalAttachment')}</span>
-                                <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs sm:text-sm text-slate-600">
-                                    <FileText className="w-4 h-4" />
-                                    {submission.evidence}
+                                <div className="space-y-3">
+                                    <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs sm:text-sm text-slate-600">
+                                        <FileText className="w-4 h-4" />
+                                        {submission.evidence}
+                                    </div>
+
+                                    {submission.evidenceAttachment?.url && (
+                                        <div className="space-y-3">
+                                            {String(submission.evidenceAttachment?.mimeType || '').startsWith('image/') && (
+                                                <div className="bg-white border border-slate-200 rounded-xl p-3">
+                                                    <img
+                                                        src={submission.evidenceAttachment.url}
+                                                        alt={submission.evidenceAttachment.name || submission.evidence}
+                                                        className="w-full max-h-80 object-contain rounded-lg"
+                                                    />
+                                                </div>
+                                            )}
+
+                                            <div className="flex flex-wrap gap-2">
+                                                <a
+                                                    href={submission.evidenceAttachment.url}
+                                                    target="_blank"
+                                                    rel="noopener"
+                                                    className="px-3 py-2 bg-slate-900 text-white rounded-lg text-xs font-bold"
+                                                >
+                                                    {t('adminDashboard.modal.view', 'View')}
+                                                </a>
+                                                <a
+                                                    href={submission.evidenceAttachment.downloadUrl || submission.evidenceAttachment.url}
+                                                    target="_blank"
+                                                    rel="noopener"
+                                                    className="px-3 py-2 bg-primary-600 text-white rounded-lg text-xs font-bold"
+                                                >
+                                                    {t('adminDashboard.modal.download', 'Download')}
+                                                </a>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         )}
@@ -208,13 +280,15 @@ const SubmissionDetailModal = ({ isOpen, onClose, submission, onUpdateStatus }) 
                         <div className="flex flex-row gap-3 flex-1">
                             <button
                                 onClick={() => onUpdateStatus?.(submission.id, 'Accepted')}
-                                className="flex-1 py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 transition-colors text-sm sm:text-base"
+                                disabled={!!isUpdating}
+                                className={`flex-1 py-3 bg-emerald-600 text-white rounded-xl font-bold transition-colors text-sm sm:text-base ${isUpdating ? 'opacity-60 cursor-not-allowed' : 'hover:bg-emerald-700'}`}
                             >
                                 {t('adminDashboard.modal.accept')}
                             </button>
                             <button
                                 onClick={() => onUpdateStatus?.(submission.id, 'Declined')}
-                                className="flex-1 py-3 bg-rose-600 text-white rounded-xl font-bold hover:bg-rose-700 transition-colors text-sm sm:text-base"
+                                disabled={!!isUpdating}
+                                className={`flex-1 py-3 bg-rose-600 text-white rounded-xl font-bold transition-colors text-sm sm:text-base ${isUpdating ? 'opacity-60 cursor-not-allowed' : 'hover:bg-rose-700'}`}
                             >
                                 {t('adminDashboard.modal.decline')}
                             </button>

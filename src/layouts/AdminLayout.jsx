@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { LayoutDashboard, LogOut, Menu, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { apiFetch, ensureCsrfCookie } from '../api/client';
 
 const AdminLayout = ({ children }) => {
     const { t } = useTranslation();
@@ -58,11 +59,18 @@ const AdminLayout = ({ children }) => {
                                 <LayoutDashboard className="w-5 h-5" /> {t('adminLayout.dashboard')}
                             </Link>
                             <button
-                                onClick={() => {
-                                    localStorage.removeItem('isAdmin');
-                                    window.dispatchEvent(new Event('admin-auth-changed'));
-                                    navigate('/admin', { replace: true });
-                                    setIsMenuOpen(false);
+                                onClick={async () => {
+                                    try {
+                                        await ensureCsrfCookie();
+                                        await apiFetch('/api/admin/logout', { method: 'POST' });
+                                    } catch (err) {
+                                        // ignore
+                                    } finally {
+                                        localStorage.removeItem('isAdmin');
+                                        window.dispatchEvent(new Event('admin-auth-changed'));
+                                        navigate('/admin', { replace: true });
+                                        setIsMenuOpen(false);
+                                    }
                                 }}
                                 className="w-full flex items-center gap-3 p-3 text-slate-600 hover:bg-slate-50 rounded-lg transition-colors text-left"
                             >

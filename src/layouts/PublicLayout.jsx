@@ -17,9 +17,9 @@ const PublicLayout = () => {
             <nav dir="ltr" className="sticky top-0 z-50 bg-slate-900 border-b border-slate-800">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="flex justify-between h-16 items-center">
-                        <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-4 min-w-0">
                             <a href="https://www.schb.dz/" target="_blank" rel="noopener noreferrer" className="hover:opacity-80 transition-opacity" title={t('nav.visitSchb')}>
-                                <img src="/Logo-Gica.png" alt="Logo" className="w-auto h-12 md:h-16 object-contain z-10 relative" />
+                                <img src="/Logo-Gica.png" alt="Logo" className="w-auto h-12 md:h-16 object-contain z-10 relative shrink-0" />
                             </a>
                             <div className="hidden md:block h-8 w-px bg-slate-700"></div>
                             <Link to="/">

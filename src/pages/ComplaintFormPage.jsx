@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ShieldCheck, Mail, Send, CheckCircle2, RefreshCw, Loader2, Copy, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
+import { apiFetch } from '../api/client';
 
 const ComplaintFormPage = () => {
     const { type } = useParams();
@@ -10,6 +11,7 @@ const ComplaintFormPage = () => {
     const { t } = useTranslation();
     const [step, setStep] = useState(1); // 1: Charter, 2: Email/Captcha, 3: Form, 4: Success
     const [loading, setLoading] = useState(false);
+    const [submitError, setSubmitError] = useState('');
 
     // Charter State
     const [charterAccepted, setCharterAccepted] = useState(false);
@@ -23,6 +25,8 @@ const ComplaintFormPage = () => {
     const [email, setEmail] = useState('');
     const [otp, setOtp] = useState('');
     const [sentOtp, setSentOtp] = useState('');
+    const [otpToken, setOtpToken] = useState('');
+    const [otpError, setOtpError] = useState('');
 
     // Form State
     const [formData, setFormData] = useState({
@@ -45,6 +49,8 @@ const ComplaintFormPage = () => {
         evidence: null,
     });
 
+    const [evidenceFile, setEvidenceFile] = useState(null);
+
     const sanitizeName = (value) => value.replace(/[^\p{L} \-']/gu, '');
 
     const sanitizePhone = (value) => {
@@ -54,6 +60,7 @@ const ComplaintFormPage = () => {
 
     const handleFileChange = (e) => {
         if (e.target.files && e.target.files[0]) {
+            setEvidenceFile(e.target.files[0]);
             setFormData({ ...formData, evidence: e.target.files[0].name });
         }
     };
@@ -84,8 +91,9 @@ const ComplaintFormPage = () => {
         }
     };
 
-    const handleEmailCaptchaSubmit = (e) => {
+    const handleEmailCaptchaSubmit = async (e) => {
         e.preventDefault();
+        setOtpError('');
         if (userInputCaptcha.toUpperCase() !== captchaVal) {
             setCaptchaError(true);
             generateCaptcha();
@@ -95,20 +103,34 @@ const ComplaintFormPage = () => {
 
         setCaptchaError(false);
         setLoading(true);
-        setTimeout(() => {
-            const randomOtp = Math.floor(100000 + Math.random() * 900000).toString();
-            console.log("------------------------------------------");
-            console.log(`CODE DE VÉRIFICATION : ${randomOtp}`);
-            console.log("------------------------------------------");
-            setSentOtp(randomOtp);
+        try {
+            const res = await apiFetch('/api/otp/send', {
+                method: 'POST',
+                body: JSON.stringify({ email }),
+            });
+            setOtpToken(res?.token || '');
+            setSentOtp('sent');
+        } catch (err) {
+            setOtpError(err?.message || 'Request failed');
+        } finally {
             setLoading(false);
-        }, 1000);
+        }
     };
 
-    const handleOtpVerify = (e) => {
+    const handleOtpVerify = async (e) => {
         e.preventDefault();
-        if (otp === sentOtp) {
+        setOtpError('');
+        setLoading(true);
+        try {
+            await apiFetch('/api/otp/verify', {
+                method: 'POST',
+                body: JSON.stringify({ token: otpToken, code: otp }),
+            });
             setStep(3);
+        } catch (err) {
+            setOtpError(err?.message || 'Request failed');
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -122,26 +144,54 @@ const ComplaintFormPage = () => {
         setTimeout(() => setCopied(false), 2000);
     };
 
-    const handleFormSubmit = (e) => {
+    const handleFormSubmit = async (e) => {
         e.preventDefault();
+        setSubmitError('');
         setLoading(true);
-        setTimeout(() => {
-            const submissions = JSON.parse(localStorage.getItem('submissions') || '[]');
-            const newId = `REF-${Math.floor(Math.random() * 9000) + 1000}`;
-            const newSubmission = {
-                ...formData,
-                id: newId,
-                type,
-                dateSubmitted: new Date().toISOString().split('T')[0],
-                status: 'Pending',
-                email
-            };
-            submissions.push(newSubmission);
-            localStorage.setItem('submissions', JSON.stringify(submissions));
-            setSubmissionId(newId);
+        try {
+            const fd = new FormData();
+            fd.append('type', type);
+            fd.append('email', email);
+            if (otpToken) fd.append('otp_token', otpToken);
+
+            if (formData.subject) fd.append('subject', formData.subject);
+            fd.append('description', formData.description);
+            if (formData.location) fd.append('location', formData.location);
+            if (formData.incidentDate) fd.append('incidentDate', formData.incidentDate);
+            fd.append('anonymous', formData.anonymous ? '1' : '0');
+            if (formData.fullName) fd.append('fullName', formData.fullName);
+            if (formData.company) fd.append('company', formData.company);
+            if (formData.phone) fd.append('phone', formData.phone);
+            if (formData.orderNumber) fd.append('orderNumber', formData.orderNumber);
+            if (formData.department) fd.append('department', formData.department);
+            if (formData.relationType) fd.append('relationType', formData.relationType);
+            if (formData.employeeId) fd.append('employeeId', formData.employeeId);
+            if (formData.position) fd.append('position', formData.position);
+            if (formData.supervisor) fd.append('supervisor', formData.supervisor);
+            if (formData.personsInvolved) fd.append('personsInvolved', formData.personsInvolved);
+            if (formData.schbDepartment) fd.append('schbDepartment', formData.schbDepartment);
+
+            if (formData.evidence) fd.append('evidence', formData.evidence);
+            if (evidenceFile) fd.append('evidence_file', evidenceFile);
+
+            const res = await apiFetch('/api/submissions', {
+                method: 'POST',
+                body: fd,
+            });
+
+            const ref = res?.reference || res?.id || '';
+            if (!ref) {
+                throw new Error('Submission reference missing');
+            }
+
+            setSubmissionId(ref);
             setStep(4);
+        } catch (err) {
+            console.error(err);
+            setSubmitError(err?.message || 'Request failed');
+        } finally {
             setLoading(false);
-        }, 2000);
+        }
     };
 
     return (
@@ -268,6 +318,8 @@ const ComplaintFormPage = () => {
                                         <button type="submit" disabled={loading} className="btn-primary w-full flex items-center justify-center gap-2 py-4 text-lg">
                                             {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : t('complaint.steps.sendVerificationCode')}
                                         </button>
+
+                                        {otpError && <p className="text-rose-500 text-sm">{otpError}</p>}
                                     </form>
                                 ) : (
                                     <form onSubmit={handleOtpVerify} className="space-y-6">
@@ -283,8 +335,22 @@ const ComplaintFormPage = () => {
                                                 maxLength={6}
                                             />
                                         </div>
-                                        <button type="submit" className="btn-primary w-full py-4">{t('complaint.steps.verifyProceed')}</button>
-                                        <button type="button" onClick={() => setSentOtp('')} className="text-primary-600 w-full text-sm font-medium">{t('complaint.steps.resetEmail')}</button>
+                                        <button type="submit" disabled={loading} className="btn-primary w-full py-4">{t('complaint.steps.verifyProceed')}</button>
+
+                                        {otpError && <p className="text-rose-500 text-sm">{otpError}</p>}
+
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setSentOtp('');
+                                                setOtp('');
+                                                setOtpToken('');
+                                                setOtpError('');
+                                            }}
+                                            className="text-primary-600 w-full text-sm font-medium"
+                                        >
+                                            {t('complaint.steps.resetEmail')}
+                                        </button>
                                     </form>
                                 )}
                             </motion.div>
@@ -482,6 +548,12 @@ const ComplaintFormPage = () => {
                                     <button type="submit" disabled={loading} className="btn-primary w-full py-4 text-lg flex items-center justify-center gap-2">
                                         {loading ? <Loader2 className="w-6 h-6 animate-spin" /> : <><Send className="w-6 h-6" /> {t('complaint.steps.submitReport')}</>}
                                     </button>
+
+                                    {submitError && (
+                                        <p className="mt-3 text-rose-600 text-sm font-medium">
+                                            {submitError}
+                                        </p>
+                                    )}
                                 </form>
                             </motion.div>
                         )}

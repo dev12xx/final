@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { AlertCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
+import { apiFetch, ensureCsrfCookie } from '../api/client';
 
 const AdminLogin = () => {
     const { t } = useTranslation();
@@ -11,15 +12,26 @@ const AdminLogin = () => {
     const [error, setError] = useState(false);
     const navigate = useNavigate();
 
-    const handleLogin = (e) => {
+    const handleLogin = async (e) => {
         e.preventDefault();
         setError(false);
-        // Simple mock logic
-        if (username === 'admin' && password === 'admin') {
+
+        try {
+            await ensureCsrfCookie();
+            const email = username === 'admin' ? 'admin@example.com' : username;
+
+            await apiFetch('/api/admin/login', {
+                method: 'POST',
+                body: JSON.stringify({
+                    email,
+                    password,
+                }),
+            });
+
             localStorage.setItem('isAdmin', 'true');
             window.dispatchEvent(new Event('admin-auth-changed'));
             navigate('/admin', { replace: true });
-        } else {
+        } catch (err) {
             setError(true);
         }
     };

@@ -10,6 +10,11 @@ body {
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
 }
 
+html,
+body {
+  overflow-x: hidden;
+}
+
 @media print {
   @page {
     size: A4;

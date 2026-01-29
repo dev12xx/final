@@ -2,50 +2,80 @@ import { useState, useEffect } from 'react';
 import { Eye, CheckCircle, XCircle, Clock, AlertCircle, Printer } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import SubmissionDetailModal from '../components/SubmissionDetailModal';
+import { apiFetch } from '../api/client';
 
 const AdminDashboard = () => {
     const { t } = useTranslation();
     const [submissions, setSubmissions] = useState([]);
     const [filter, setFilter] = useState('all');
     const [selectedSubmission, setSelectedSubmission] = useState(null);
+    const [updatingId, setUpdatingId] = useState(null);
 
-    const loadSubmissions = () => {
-        const data = JSON.parse(localStorage.getItem('submissions') || '[]');
-        setSubmissions(data);
+    const mapFilterToStatus = (f) => {
+        if (f === 'pending') return 'Pending';
+        if (f === 'accepted') return 'Accepted';
+        if (f === 'declined') return 'Declined';
+        if (f === 'appeal') return 'Appeal';
+        return 'all';
+    };
+
+    const loadSubmissions = async (activeFilter = filter) => {
+        try {
+            const status = mapFilterToStatus(activeFilter);
+            const qs = status && status !== 'all' ? `?status=${encodeURIComponent(status)}` : '';
+            const res = await apiFetch(`/api/admin/submissions${qs}`);
+            setSubmissions(res?.data || []);
+        } catch (err) {
+            if (err?.status === 401 || err?.status === 403) {
+                localStorage.removeItem('isAdmin');
+                window.dispatchEvent(new Event('admin-auth-changed'));
+            }
+        }
     };
 
     useEffect(() => {
         loadSubmissions();
-
-        const handleStorageChange = () => {
-            loadSubmissions();
-        };
-
-        window.addEventListener('storage', handleStorageChange);
-        return () => window.removeEventListener('storage', handleStorageChange);
     }, []);
 
-    const updateStatus = (id, newStatus) => {
-        const updated = submissions.map(s => s.id === id ? { ...s, status: newStatus } : s);
-        setSubmissions(updated);
-        localStorage.setItem('submissions', JSON.stringify(updated));
-        // Force storage event for other tabs/windows if needed, though 'setItem' fires it in OTHER windows.
-        // For same-window cross-component updates (unlikely here but good practice):
-        window.dispatchEvent(new Event('storage'));
+    const updateStatus = async (id, newStatus) => {
+        if (updatingId === id) return;
 
-        if (selectedSubmission && selectedSubmission.id === id) {
-            setSelectedSubmission({ ...selectedSubmission, status: newStatus });
+        const prevSelected = selectedSubmission;
+        const prevListItem = submissions.find((s) => s.id === id);
+
+        if (prevListItem) {
+            const optimisticItem = { ...prevListItem, status: newStatus };
+            setSubmissions((prev) => prev.map((s) => (s.id === id ? optimisticItem : s)));
+            if (prevSelected && prevSelected.id === id) {
+                setSelectedSubmission({ ...prevSelected, status: newStatus });
+            }
         }
-    };
 
-    const deleteSubmission = (id) => {
-        const updated = submissions.filter(s => s.id !== id);
-        setSubmissions(updated);
-        localStorage.setItem('submissions', JSON.stringify(updated));
-        window.dispatchEvent(new Event('storage'));
+        setUpdatingId(id);
+        try {
+            const res = await apiFetch(`/api/admin/submissions/${encodeURIComponent(id)}/status`, {
+                method: 'PATCH',
+                body: JSON.stringify({ status: newStatus }),
+            });
 
-        if (selectedSubmission && selectedSubmission.id === id) {
-            setSelectedSubmission(null);
+            const updatedItem = res?.submission;
+            if (updatedItem) {
+                setSubmissions((prev) => prev.map((s) => (s.id === id ? updatedItem : s)));
+                setSelectedSubmission((prev) => (prev && prev.id === id ? updatedItem : prev));
+            }
+        } catch (err) {
+            if (prevListItem) {
+                setSubmissions((prev) => prev.map((s) => (s.id === id ? prevListItem : s)));
+            }
+            if (prevSelected && prevSelected.id === id) {
+                setSelectedSubmission(prevSelected);
+            }
+            if (err?.status === 401 || err?.status === 403) {
+                localStorage.removeItem('isAdmin');
+                window.dispatchEvent(new Event('admin-auth-changed'));
+            }
+        } finally {
+            setUpdatingId(null);
         }
     };
 
@@ -89,7 +119,10 @@ const AdminDashboard = () => {
                     ].map((f) => (
                         <button
                             key={f.id}
-                            onClick={() => setFilter(f.id)}
+                            onClick={() => {
+                                setFilter(f.id);
+                                loadSubmissions(f.id);
+                            }}
                             className={`px-3 py-1.5 md:px-4 md:py-2 rounded-lg text-xs md:text-sm font-medium capitalize transition-all ${filter === f.id ? 'bg-primary-600 text-white shadow-md' : 'text-slate-600 hover:bg-slate-50'
                                 }`}
                         >
@@ -167,6 +200,7 @@ const AdminDashboard = () => {
                 onClose={() => setSelectedSubmission(null)}
                 submission={selectedSubmission}
                 onUpdateStatus={updateStatus}
+                isUpdating={!!updatingId && updatingId === selectedSubmission?.id}
             />
         </div>
     );
